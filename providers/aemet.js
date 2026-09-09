@@ -32,7 +32,9 @@ function loadMasks () {
 
 const defaults = Object.freeze({
   apiBase: 'https://opendata.aemet.es/opendata/api',
-  frameCacheSeconds: 120
+  frameCacheSeconds: 120,
+  cellThresholdDbz: 35,
+  cellMinPixels: 4
 })
 
 module.exports = {
@@ -55,6 +57,21 @@ module.exports = {
         minimum: 30,
         maximum: 600,
         default: defaults.frameCacheSeconds
+      },
+      cellThresholdDbz: {
+        title: 'Cell detection threshold (dBZ)',
+        description: 'Reflectivity at/above which pixels are grouped into convective cells. Best-effort, from legend-quantised reflectivity.',
+        type: 'integer',
+        minimum: 12,
+        maximum: 72,
+        default: defaults.cellThresholdDbz
+      },
+      cellMinPixels: {
+        title: 'Minimum cell size (pixels ~ km²)',
+        type: 'integer',
+        minimum: 1,
+        maximum: 200,
+        default: defaults.cellMinPixels
       }
     }
   },
@@ -64,6 +81,8 @@ module.exports = {
       apiBase: settings.apiBase || defaults.apiBase,
       apiKey: settings.apiKey,
       frameCacheSeconds: settings.frameCacheSeconds || defaults.frameCacheSeconds,
+      cellThresholdDbz: Number.isFinite(settings.cellThresholdDbz) ? settings.cellThresholdDbz : defaults.cellThresholdDbz,
+      cellMinPixels: Number.isFinite(settings.cellMinPixels) ? settings.cellMinPixels : defaults.cellMinPixels,
       decodeRGBA,
       staticMasks: loadMasks()
     })

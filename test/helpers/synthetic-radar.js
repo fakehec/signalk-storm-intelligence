@@ -54,6 +54,19 @@ function makeSyntheticGif () {
   return Buffer.from(buf.slice(0, n))
 }
 
+// A synthetic frame carrying a solid convective block (a "cell") of `size`x`size`
+// pixels at (x0,y0) using palette index `paletteIdx` (default 8 = 54 dBZ), on an
+// otherwise empty disk. Used to exercise downloadRaw/cellsFromRaw.
+function makeSyntheticGifWithCell (x0 = 220, y0 = 240, size = 4, paletteIdx = 8) {
+  const { width: W, height: H } = GEOREF
+  const idx = new Uint8Array(W * H)
+  for (let y = y0; y < y0 + size; y++) for (let x = x0; x < x0 + size; x++) idx[y * W + x] = paletteIdx
+  const buf = Buffer.alloc(W * H * 2 + 4096)
+  const gw = new GifWriter(buf, W, H, { palette: PALETTE })
+  const n = gw.addFrame(0, 0, W, H, idx, { palette: PALETTE })
+  return Buffer.from(buf.slice(0, n))
+}
+
 // Packed 1-bit row-major mask (little-endian) covering the given [x,y] pixels.
 function makeMask (pixels) {
   const { width: W, height: H } = GEOREF
@@ -67,6 +80,7 @@ function makeMask (pixels) {
 
 module.exports = {
   makeSyntheticGif,
+  makeSyntheticGifWithCell,
   makeMask,
   ECHOES,
   COAST_PX,

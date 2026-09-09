@@ -20,9 +20,10 @@ test('created instance satisfies assertProvider and describes cleanly', () => {
   assert.equal(p.id, 'aemet')
   assert.equal(typeof p.latest, 'function')
   assert.equal(typeof p.tile, 'function')
-  // Display-only: no raw acquisition / cell inference advertised (spec §7).
-  assert.equal(typeof p.downloadRaw, 'undefined')
-  assert.equal(typeof p.cellsFromRaw, 'undefined')
+  // Inference tier: best-effort raw acquisition + cell reconstruction advertised.
+  assert.equal(typeof p.downloadRaw, 'function')
+  assert.equal(typeof p.cellsFromRaw, 'function')
+  assert.equal(p.rawExtension(), '.gif')
 
   const d = describeProvider(p)
   assert.equal(d.id, 'aemet')
@@ -30,8 +31,8 @@ test('created instance satisfies assertProvider and describes cleanly', () => {
   const pm = d.products.PM
   assert.equal(pm.units, 'dBZ')
   assert.equal(pm.capabilities.map, true, 'raster display capable')
-  assert.equal(pm.capabilities.raw, false, 'no raw acquisition')
-  assert.equal(pm.capabilities.cells, false, 'no cell inference')
+  assert.equal(pm.capabilities.raw, true, 'raw acquisition advertised')
+  assert.equal(pm.capabilities.cells, true, 'cell inference advertised')
   assert.equal(pm.capabilities.temporal, true)
 })
 

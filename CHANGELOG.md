@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- AEMET provider inference tier (experimental, opt-in): `downloadRaw` + `cellsFromRaw` reconstruct convective storm cells from the reflectivity so an AEMET site can act as a `stormSource` where no native-cell provider has coverage (e.g. the Balearics). Cells are threshold-grouped 8-connected components emitted as convex-hull polygons with a 0–5 severity from peak dBZ, each flagged `properties.reconstructed = true`. Per radar-provider-specification.md §7 this is a documented best-effort from a rendered, legend-quantised product — squall/thunderstorm awareness, not precision — and `downloadRaw` returns the GIF transparently as `image/gif`. Configurable via `cellThresholdDbz`/`cellMinPixels`.
 - Added an AEMET regional-radar provider (Spain / western Mediterranean), first site Palma de Mallorca (`pm`, Balearic Islands), closing the Iberian coverage gap left by Radar-DPC/DWD/OPERA. Display tier only: reflectivity is reconstructed from the OpenData palette-GIF product (palette→dBZ) and geolocated by a coastline-matched linear EPSG:4326 fit, then served as EPSG:3857 tiles. Live-only (the API exposes no archive) and, per radar-provider-specification.md §7, it deliberately advertises no `downloadRaw`/`cellsFromRaw` from a rendered product. New dependency `omggif` (GIF decode); deterministic raster/contract tests and reproducibility scripts included.
 
 ## 2.5.9 - 2026-08-21

@@ -7,15 +7,29 @@ western-Mediterranean / Iberian gap left by the other bundled providers
 no Spanish contribution). The first shipped site is **Palma de Mallorca
 (`pm`)**, covering the Balearic Islands within a ~240 km range.
 
-## Status: display tier only
+## Tiers
 
-This adapter implements the mandatory raster contract — `products`, `latest`,
-`tile` — and **deliberately does not** advertise `downloadRaw` or
-`cellsFromRaw`. The AEMET regional product is a *rendered palette image*, not a
-gridded native raster, so treating it as raw acquisition or deriving storm
-cells from it would conflict with radar-provider-specification.md §7. It is
-suitable as a display layer and as coarse observational evidence, not as an
-inference raw source. See issue discussion for the cell-detection question.
+- **Display (recommended, always safe):** the mandatory raster contract —
+  `products`, `latest`, `tile` — serving reflectivity tiles.
+- **Inference (best-effort, experimental):** `downloadRaw` + `cellsFromRaw`
+  reconstruct convective storm cells from the reflectivity. **Read the caveat
+  below before relying on it.**
+
+### Inference tier caveat (spec §7)
+
+The AEMET regional product is a *rendered palette image*, not gridded native
+data. `cellsFromRaw` therefore reconstructs cells from reflectivity that has
+been **quantised to the 12–72 dBZ legend steps**, threshold-grouped into
+8-connected components and emitted as convex-hull polygons with a 0–5 severity
+from the component's peak dBZ (see `lib/aemet-cells.js`). Per
+radar-provider-specification.md §7 this is a **documented best-effort**: every
+cell is flagged `properties.reconstructed = true`. It is adequate to **flag and
+track strong convective cells** (squall/thunderstorm awareness for a region
+otherwise uncovered by native-cell providers), **not** a precision reflectivity
+or a substitute for a real Heavy-Rain-Detection product. `downloadRaw` returns
+the GIF itself (`image/gif`), transparently — it does not relabel a rendered
+image as native data. Whether this best-effort belongs upstream, or should wait
+for a gridded AEMET source, is the open question in the provider discussion.
 
 ## Data source and access
 
@@ -85,9 +99,12 @@ Provider settings (`providers.aemet`):
 |---|---|---|
 | `apiKey` | `""` | AEMET OpenData key; required. Sent only to AEMET. |
 | `frameCacheSeconds` | `120` | Shared cache for the metadata + decoded frame. |
+| `cellThresholdDbz` | `35` | Inference tier: reflectivity at/above which pixels group into cells. |
+| `cellMinPixels` | `4` | Inference tier: minimum cell area (px ≈ km²). |
 
 The provider is **opt-in** (`recommended.enabled = false`) because it needs a
-key. Enable it and add `aemet:PM` to the display layers.
+key. Enable it and add `aemet:PM` to the display layers. To use the inference
+tier, set the storm source to `aemet:PM` (mind the caveat above).
 
 ## Licensing and attribution
 
