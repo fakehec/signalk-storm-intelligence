@@ -76,6 +76,24 @@ function isPng (buf) {
   return buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47
 }
 
+// Decode the alpha channel of an RGBA PNG produced by encodePng (filter 0).
+function pngAlphas (buf) {
+  let p = 8; let width = 0; let height = 0; const idat = []
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p); const type = buf.toString('ascii', p + 4, p + 8)
+    const data = buf.subarray(p + 8, p + 8 + len)
+    if (type === 'IHDR') { width = data.readUInt32BE(0); height = data.readUInt32BE(4) }
+    else if (type === 'IDAT') idat.push(data)
+    else if (type === 'IEND') break
+    p += 12 + len
+  }
+  const rawimg = zlib.inflateSync(Buffer.concat(idat))
+  const stride = width * 4 + 1
+  const alphas = []
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) alphas.push(rawimg[y * stride + 1 + x * 4 + 3])
+  return { width, height, alphas }
+}
+
 test('decodePalettePng un-filters every filter type and returns exact indices', () => {
   const w = 4; const h = 5
   const grid = []
@@ -127,6 +145,31 @@ test('renderTile paints an echo at its location and stays transparent off-extent
   const empty = renderTile(raster, [0, 0, 10000, 10000], 32)
   assert.ok(isPng(empty))
   assert.deepEqual(empty, transparentPng(32))
+})
+
+test('renderTile bilinear smoothing feathers echo edges (partial alpha)', () => {
+  // Single opaque echo pixel; zoom in tight so it is upsampled across many
+  // output pixels. Nearest-neighbour would give only 0 or DISPLAY_ALPHA; the
+  // coverage-weighted bilinear warp must produce intermediate alpha at the edge.
+  const width = GEOREF.width; const height = GEOREF.height
+  const rgba = new Uint8Array(width * height * 4)
+  const xi = 750; const yi = 1165
+  const o = (yi * width + xi) * 4
+  rgba[o] = 255; rgba[o + 1] = 0; rgba[o + 2] = 0; rgba[o + 3] = 255
+  const raster = { width, height, rgba }
+
+  const [lon, lat] = pxToLonLat(xi, yi)
+  const R = 6378137
+  const mx = (lon * Math.PI / 180) * R
+  const my = Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) * R
+  const d = 4000 // tight ~4 km half-window -> heavy upsampling
+  const png = renderTile(raster, [mx - d, my - d, mx + d, my + d], 128)
+  assert.ok(isPng(png))
+  const { alphas } = pngAlphas(png)
+  const drawn = alphas.filter(a => a > 0).length
+  const partial = alphas.filter(a => a > 0 && a < 190).length
+  assert.ok(drawn > 0, 'the echo is rendered')
+  assert.ok(partial > 0, 'edges are feathered with partial alpha (not hard blocks)')
 })
 
 test('encodePng and transparentPng produce valid PNG signatures', () => {
