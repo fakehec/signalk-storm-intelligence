@@ -2,6 +2,7 @@
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
+const zlib = require('node:zlib')
 const { GifReader } = require('omggif')
 
 const {
@@ -19,6 +20,29 @@ function decodeRGBA (buffer) {
 
 function isPng (buf) {
   return buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47
+}
+
+// Decode the alpha channel of a PNG produced by encodePng (RGBA, filter 0).
+function pngAlphas (buf) {
+  let p = 8; let width = 0; let height = 0; const idat = []
+  while (p < buf.length) {
+    const len = buf.readUInt32BE(p); const type = buf.toString('ascii', p + 4, p + 8)
+    const data = buf.subarray(p + 8, p + 8 + len)
+    if (type === 'IHDR') { width = data.readUInt32BE(0); height = data.readUInt32BE(4) }
+    else if (type === 'IDAT') idat.push(data)
+    else if (type === 'IEND') break
+    p += 12 + len
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat))
+  const stride = width * 4 + 1 // one filter byte per scanline
+  const alphas = []
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) alphas.push(raw[y * stride + 1 + x * 4 + 3])
+  return { width, height, alphas }
+}
+
+function lonLatToMer (lon, lat) {
+  const W = 20037508.342789244
+  return [(lon / 180) * W, Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180) * W / 180]
 }
 
 test('georef round-trips and lands known capes within pixel tolerance', () => {
@@ -84,6 +108,24 @@ test('renderTile returns a PNG of the requested size for a Balearic tile', () =>
   const bbox = [0, 4600000, 500000, 5000000] // web-mercator, ~Balearics extent
   const png = renderTile(raster, bbox, 256)
   assert.ok(Buffer.isBuffer(png) && isPng(png))
+})
+
+test('renderTile bilinear smoothing feathers echo edges (partial alpha)', () => {
+  const raster = decodeReflectivity(makeSyntheticGif(), decodeRGBA, null)
+  // Zoom tight over one synthetic echo so a source cell is upsampled across many
+  // output pixels: nearest-neighbour would give only 0 or 170 alpha, whereas the
+  // coverage-weighted bilinear warp must produce intermediate alpha at the edge.
+  const [ex, ey] = ECHOES[0]
+  const [lon, lat] = pxToLonLat(ex, ey)
+  const [mx, my] = lonLatToMer(lon, lat)
+  const H = 4000 // metres half-extent -> heavy upsampling of ~1 km grid cells
+  const png = renderTile(raster, [mx - H, my - H, mx + H, my + H], 256)
+  assert.ok(Buffer.isBuffer(png) && isPng(png))
+  const { alphas } = pngAlphas(png)
+  const drawn = alphas.filter(a => a > 0).length
+  const partial = alphas.filter(a => a > 0 && a < 170).length
+  assert.ok(drawn > 0, 'the echo is rendered')
+  assert.ok(partial > 0, 'edges are feathered with partial alpha (not hard blocks)')
 })
 
 test('transparentPng is a valid PNG', () => {
